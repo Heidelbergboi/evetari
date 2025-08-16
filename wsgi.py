@@ -1,3 +1,4 @@
-# Entry point for Gunicorn on Render
-# If you later switch to a factory pattern, change this file only.
-from app import app  # app.py defines: app = Flask(__name__)
+# Gunicorn entrypoint for Render (Flask app factory pattern)
+from app import create_app
+
+app = create_app()
