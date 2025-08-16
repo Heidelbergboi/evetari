@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en" class="tw-scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}My Flask App{% endblock %}</title>
+
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+
+  <!-- TailwindCSS with custom prefix and dark mode support -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      prefix: 'tw-',
+      darkMode: 'class',
+      corePlugins: { preflight: false }
+    }
+  </script>
+
+  <!-- Google Fonts: Inter -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
+
+  <!-- Material Icons -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  
+  <style>
+    /* Global & Base Styles */
+    body {
+      font-family: 'Inter', sans-serif;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+    /* Navbar */
+    .navbar-custom {
+      background: linear-gradient(135deg, #4a90e2, #357ABD);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      padding: 0.75rem 1rem;
+    }
+    .navbar-custom .navbar-brand {
+      font-weight: 700;
+      color: #fff !important;
+      font-size: 1.5rem;
+    }
+    .navbar-custom .navbar-toggler,
+    .navbar-custom .material-icons,
+    .navbar-custom .nav-link,
+    .navbar-custom .navbar-text,
+    .navbar-custom .btn {
+      color: #fff !important;
+      transition: color 0.3s ease;
+    }
+    .navbar-custom .btn-outline-secondary {
+      border-color: rgba(255,255,255,0.7);
+      color: #fff !important;
+    }
+    .navbar-custom .btn-outline-secondary:hover {
+      background-color: rgba(255,255,255,0.15);
+    }
+    /* Offcanvas Sidebar */
+    .offcanvas-header {
+      background: linear-gradient(135deg, #4a90e2, #357ABD);
+      color: #fff;
+      padding: 1rem;
+    }
+    .offcanvas-body {
+      background-color: #f8f9fa;
+      padding: 0;
+    }
+    .list-group-item-action {
+      transition: background-color 0.3s ease;
+      border: none;
+    }
+    .list-group-item-action:hover {
+      background-color: #e9ecef;
+    }
+    /* Desktop Sidebar */
+    .sidebar-desktop {
+      background-color: #f8f9fa;
+      border-right: 1px solid #dee2e6;
+      min-height: 100vh;
+      padding-top: 1.5rem;
+      transition: width 0.3s ease;
+    }
+    .sidebar-desktop .nav-link {
+      color: #495057;
+      padding: 0.75rem 1rem;
+      border-radius: 0.5rem;
+      transition: background-color 0.3s ease;
+    }
+    .sidebar-desktop .nav-link:hover {
+      background-color: #e9ecef;
+    }
+    /* Collapsed Sidebar Styles */
+    .sidebar-desktop.collapsed {
+      width: 60px;
+    }
+    .sidebar-desktop.collapsed .nav-link {
+      text-align: center;
+      padding-left: 0.5rem;
+      padding-right: 0.5rem;
+    }
+    .sidebar-desktop.collapsed .menu-text {
+      display: none;
+    }
+    /* Main Content */
+    main {
+      min-height: 100vh;
+      transition: background-color 0.3s ease, color 0.3s ease;
+      padding-top: 1.5rem;
+    }
+    /* Alerts */
+    .alert {
+      border-radius: 0.5rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    /* Footer */
+    .custom-footer {
+      background: linear-gradient(135deg, #4a90e2, #357ABD);
+      color: #fff;
+      padding: 1rem 0;
+      text-align: center;
+      margin-top: 2rem;
+    }
+    /* Dark Mode Tweaks */
+    .tw-dark .navbar-custom {
+      background: linear-gradient(135deg, #2a2a2a, #1c1c1c);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+    .tw-dark .offcanvas-header {
+      background: linear-gradient(135deg, #2a2a2a, #1c1c1c);
+      color: #fff;
+    }
+    .tw-dark .sidebar-desktop {
+      background-color: #2e2e2e;
+      border-right: 1px solid #3a3a3a;
+    }
+    .tw-dark .sidebar-desktop .nav-link:hover {
+      background-color: #3a3a3a;
+    }
+    .tw-dark body {
+      background-color: #121212;
+      color: #e0e0e0;
+    }
+    .tw-dark .alert {
+      background-color: #2a2a2a;
+      color: #f1f1f1;
+      border: none;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    }
+    .tw-dark .custom-footer {
+      background: linear-gradient(135deg, #2a2a2a, #1c1c1c);
+    }
+  </style>
+
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="tw-bg-gray-100 tw-text-gray-900 tw-dark:tw-bg-gray-900 tw-dark:tw-text-gray-100">
+  <!-- Offcanvas Sidebar (Mobile) -->
+  <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasSidebar" aria-labelledby="offcanvasSidebarLabel">
+    <div class="offcanvas-header">
+      <h5 class="offcanvas-title" id="offcanvasSidebarLabel">Navigation</h5>
+      <button type="button" class="btn-close btn-close-white text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body p-0">
+      <nav class="list-group list-group-flush">
+        <a href="{{ url_for('index') }}" class="list-group-item list-group-item-action">
+          <span class="material-icons align-middle">home</span> Home
+        </a>
+        <a href="{{ url_for('dashboard') }}" class="list-group-item list-group-item-action">
+          <span class="material-icons align-middle">dashboard</span> Dashboard
+        </a>
+      </nav>
+    </div>
+  </div>
+
+  <!-- Top Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-custom">
+    <div class="container-fluid">
+      <!-- Mobile Sidebar Toggle -->
+      <button class="navbar-toggler d-lg-none border-0" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasSidebar" aria-controls="offcanvasSidebar">
+        <span class="material-icons">menu</span>
+      </button>
+      <!-- Brand -->
+      <a class="navbar-brand ms-2" href="{{ url_for('index') }}">Evetari</a>
+      <!-- Right-side controls -->
+      <div class="ms-auto d-flex align-items-center">
+        {% if session.wp_site %}
+          <span class="navbar-text me-3 tw-font-medium tw-text-white">
+            WP: {{ session.wp_site }}
+          </span>
+          <a class="btn btn-outline-secondary btn-sm me-2" href="{{ url_for('wp_logout') }}">WP Logout</a>
+        {% else %}
+          <a class="btn btn-outline-secondary btn-sm me-2" href="{{ url_for('wp_login') }}">WP Login</a>
+        {% endif %}
+        {% if current_user %}
+          <span class="navbar-text me-2 tw-font-medium tw-text-white">
+            Signed in as: {{ current_user.email }}
+          </span>
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('logout') }}">Logout</a>
+        {% else %}
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('login') }}">Login</a>
+        {% endif %}
+        <!-- Dark Mode Toggle -->
+        <button id="themeToggleBtn" class="btn btn-outline-secondary ms-3 btn-sm" type="button" onclick="toggleTheme()">
+          <span id="themeToggleIcon" class="material-icons">dark_mode</span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Layout: Sidebar + Content -->
+  <div class="container-fluid">
+    <div class="row">
+      <!-- Desktop Sidebar -->
+      <div id="desktopSidebar" class="col-lg-2 d-none d-lg-block sidebar-desktop p-0">
+        <nav class="navbar navbar-light flex-lg-column h-100 align-items-stretch">
+          <div class="mt-4 mb-4 ps-3 d-flex justify-content-between align-items-center">
+            <span class="h5 tw-text-gray-700">Menu</span>
+            <button id="toggleSidebar" class="btn btn-outline-secondary btn-sm">Collapse</button>
+          </div>
+          <ul class="nav nav-pills flex-column mb-auto ps-2">
+            <li class="nav-item mb-1">
+              <a href="{{ url_for('index') }}" class="nav-link tw-rounded">
+                <span class="material-icons align-middle">home</span>
+                <span class="menu-text"> Home</span>
+              </a>
+            </li>
+            <li class="nav-item mb-1">
+              <a href="{{ url_for('dashboard') }}" class="nav-link tw-rounded">
+                <span class="material-icons align-middle">dashboard</span>
+                <span class="menu-text"> Dashboard</span>
+              </a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+      <!-- Content Area -->
+      <main class="col-lg-10 px-4 py-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="custom-footer">
+    <div class="container text-center">
+      <small>&copy; 2025 Evetari. All rights reserved.</small>
+    </div>
+  </footer>
+
+  <!-- Bootstrap JS Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Dark Mode Toggle Script -->
+  <script>
+    (function() {
+      let storedTheme = localStorage.getItem('theme');
+      if (storedTheme === 'dark' || (!storedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+        document.getElementById('themeToggleIcon').textContent = 'light_mode';
+      }
+    })();
+    function toggleTheme() {
+      const htmlEl = document.documentElement;
+      const iconEl = document.getElementById('themeToggleIcon');
+      const currentlyDark = htmlEl.classList.toggle('dark');
+      if (currentlyDark) {
+        iconEl.textContent = 'light_mode';
+        localStorage.setItem('theme', 'dark');
+      } else {
+        iconEl.textContent = 'dark_mode';
+        localStorage.setItem('theme', 'light');
+      }
+    }
+  </script>
+  <!-- Sidebar Toggle Script -->
+  <script>
+    document.getElementById('toggleSidebar').addEventListener('click', function() {
+      var sidebar = document.getElementById('desktopSidebar');
+      sidebar.classList.toggle('collapsed');
+      if (sidebar.classList.contains('collapsed')) {
+        this.textContent = 'Expand';
+      } else {
+        this.textContent = 'Collapse';
+      }
+    });
+  </script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

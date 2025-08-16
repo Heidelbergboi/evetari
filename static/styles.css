@@ -1,0 +1,33 @@
+/* styles.css */
+
+/* Smooth transitions for theme toggling and global elements */
+.tw-dark\:tw-bg-gray-800,
+.tw-dark\:tw-bg-gray-900,
+.tw-dark\:tw-text-gray-100,
+.tw-dark\:tw-text-white,
+.bg-light,
+.bg-dark,
+body {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Active sidebar nav-link styling */
+.nav-link.active {
+  background-color: rgba(13, 110, 253, 0.1);
+  font-weight: 500;
+}
+
+/* Hover effect for sidebar links */
+.list-group-item-action:hover,
+.nav-pills .nav-link:hover {
+  background-color: rgba(13, 110, 253, 0.15);
+}
+
+/* Additional modern animations */
+a, button {
+  transition: all 0.3s ease;
+}
+a:hover, button:hover {
+  text-decoration: none;
+  transform: translateY(-2px);
+}

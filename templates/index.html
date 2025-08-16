@@ -1,0 +1,762 @@
+{% extends "base.html" %}
+{% block title %}My Articles - Journalist Hub{% endblock %}
+{% block extra_head %}
+<!-- Load Font Awesome for icons -->
+<link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+      integrity="sha512-fn/7L4gOTn9J96x9e8f3Tx6KIRiWcILZbJ7YGH6JX05Clz//aHVKLEZ7rKZ6AB54CLwO6apm/x81OW2bZpwZvg=="
+      crossorigin="anonymous" referrerpolicy="no-referrer" />
+<!-- Google Font: Inter -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Global Reset & Base Styles */
+  * {
+    margin: 0; 
+    padding: 0; 
+    box-sizing: border-box;
+  }
+  html, body {
+    height: 100%;
+    font-family: "Inter", sans-serif;
+    background-color: #f1f3f5;
+    color: #1f2937;
+  }
+  .container {
+    margin-top: 1.5rem;
+  }
+  /* Top Button Row (Refresh Buttons Only) */
+  .top-button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    justify-content: center;
+  }
+  .top-button-row form {
+    margin: 0;
+  }
+  /* Refresh Buttons */
+  .btn-refresh-twitter {
+    background-color: #FFA500;
+    color: #fff;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+  }
+  .btn-refresh-twitter:hover {
+    background-color: #e69700;
+    transform: translateY(-2px);
+  }
+  .btn-refresh-facebook {
+    background-color: #0A58CA;
+    color: #fff;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+  }
+  .btn-refresh-facebook:hover {
+    background-color: #084298;
+    transform: translateY(-2px);
+  }
+  /* Sidebar (Article List) Styles */
+  .sidebar {
+    background-color: #ffffff;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  .sidebar h4 {
+    margin-bottom: 1rem;
+    font-weight: 600;
+    color: #2d3748;
+    text-align: center;
+  }
+  .sidebar .platform-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .sidebar .platform-buttons button {
+    flex: 1;
+    padding: 0.5rem 0;
+    font-size: 0.9rem;
+    border: none;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+    color: #fff;
+  }
+  .btn-twitter-articles {
+    background-color: #1DA1F2;
+  }
+  .btn-twitter-articles:hover {
+    background-color: #1484c7;
+  }
+  .btn-facebook-articles {
+    background-color: #1877F2;
+  }
+  .btn-facebook-articles:hover {
+    background-color: #125aba;
+  }
+  .sidebar .mb-3 button {
+    margin-right: 0.5rem;
+  }
+  /* Article Grouping Styles */
+  .article-group-container {
+    margin-bottom: 1rem;
+  }
+  .article-group-heading {
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #555;
+    padding: 0.5rem;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #e2e8f0, #f7fafc);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: background-color 0.2s ease;
+  }
+  .article-group-heading:hover {
+    background: linear-gradient(135deg, #dce2e9, #f2f6f9);
+  }
+  .article-group-heading .toggle-icon {
+    font-size: 1rem;
+    margin-left: 0.5rem;
+    color: #777;
+  }
+  .article-group-articles {
+    margin-top: 0.25rem;
+  }
+  /* Individual Article Item */
+  .article-item {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    background-color: #fff;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    cursor: pointer;
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
+  }
+  .article-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+  .article-title-truncate {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #212529;
+  }
+  .article-date {
+    font-size: 0.85rem;
+    color: #6c757d;
+  }
+  .unread-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background-color: red;
+    border-radius: 50%;
+    margin-left: 6px;
+  }
+  /* Middle Column: Content Pane */
+  .content-pane {
+    background-color: #fff;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  .content-pane h2 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #2d3748;
+  }
+  .action-buttons {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+  }
+  .action-buttons button {
+    padding: 0.5rem 1rem;
+  }
+  .article-image {
+    width: 100%;
+    height: 300px;
+    object-fit: cover;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+  }
+  #selected-article-body {
+    white-space: pre-wrap; 
+    line-height: 1.6;
+    margin-bottom: 1rem;
+  }
+  /* Iframe for Original Post */
+  #original-post-iframe-container {
+    margin-top: 20px;
+    display: none;
+  }
+  /* Publish & Save Draft Buttons */
+  .btn-publish-now {
+    background-color: #10b981;
+    color: #fff;
+    border: none;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+  }
+  .btn-publish-now:hover {
+    background-color: #059669;
+    transform: translateY(-2px);
+  }
+  .btn-save-draft {
+    background-color: #facc15;
+    color: #000;
+    border: none;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+  }
+  .btn-save-draft:hover {
+    background-color: #eab308;
+    transform: translateY(-2px);
+  }
+  /* Edit Form Styles */
+  #edit-article-container input, 
+  #edit-article-container textarea {
+    margin-bottom: 0.75rem;
+  }
+  /* Right Pane: WP Categories */
+  .right-pane {
+    background-color: #fff;
+    padding: 1rem;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  .right-pane h3 {
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 1rem;
+    display: inline-block;
+  }
+  .right-pane .collapse-btn {
+    display: inline-block;
+    float: right;
+    margin-top: -0.5rem;
+  }
+  /* When collapsed, hide the categories list */
+  #wp-category-list.collapsed {
+    display: none;
+  }
+</style>
+{% endblock %}
+{% block content %}
+<!-- TOP BUTTON ROW for Refresh Actions Only -->
+<div class="top-button-row">
+  <form id="refresh-twitter-form" action="{{ url_for('run_scraper') }}" method="post">
+    <button type="submit" class="btn btn-sm btn-refresh-twitter">
+      <i class="fas fa-sync-alt"></i> Refresh Twitter
+    </button>
+  </form>
+  <form id="refresh-facebook-form" action="{{ url_for('run_fb_scraper') }}" method="post">
+    <button type="submit" class="btn btn-sm btn-refresh-facebook">
+      <i class="fas fa-sync-alt"></i> Refresh Facebook
+    </button>
+  </form>
+</div>
+<!-- MAIN ROW: Sidebar (Articles), Content Pane, and Right Pane (WP Categories) -->
+<div class="row">
+  <!-- LEFT COLUMN: Article Sidebar -->
+  <div class="col-lg-3 mb-4">
+    <div class="sidebar">
+      <h4>Articles</h4>
+      <!-- Platform Selection Buttons -->
+      <div class="platform-buttons mb-3">
+        <button id="btn-twitter-articles" class="btn btn-sm btn-twitter-articles">
+          <i class="fab fa-twitter"></i> Twitter Articles
+        </button>
+        <button id="btn-facebook-articles" class="btn btn-sm btn-facebook-articles">
+          <i class="fab fa-facebook-f"></i> Facebook Articles
+        </button>
+      </div>
+      <!-- Selection Controls -->
+      <div class="mb-3">
+        <button id="btn-select-all" class="btn btn-outline-secondary btn-sm me-2">
+          <i class="fas fa-check-square"></i> Select All
+        </button>
+        <button id="btn-delete-selected" class="btn btn-outline-danger btn-sm">
+          <i class="fas fa-trash-alt"></i> Delete Selected
+        </button>
+      </div>
+      <!-- Grouped Article List -->
+      <div id="grouped-article-list"></div>
+    </div>
+  </div>
+  <!-- MIDDLE COLUMN: Selected Article Display -->
+  <div class="col-lg-6 mb-4">
+    <div class="content-pane">
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-3">
+        <h2 id="selected-article-title" class="mb-2 mb-md-0"></h2>
+        <div class="action-buttons" id="action-buttons-container">
+          <button id="btn-edit" class="btn btn-sm btn-primary">
+            <i class="fas fa-edit"></i> Edit
+          </button>
+          <button id="btn-delete" class="btn btn-sm btn-danger">
+            <i class="fas fa-trash-alt"></i> Delete
+          </button>
+          <button id="btn-publish-now" class="btn-publish-now">
+            <i class="fas fa-upload"></i> Publish Now
+          </button>
+          <button id="btn-save-draft" class="btn-save-draft">
+            <i class="far fa-save"></i> Save as Draft
+          </button>
+        </div>
+      </div>
+      <div id="selected-category-name" class="mb-2 text-muted"></div>
+      <div id="selected-article-source" class="mb-3"></div>
+      <!-- Article Image -->
+      <div id="selected-article-image-container" class="mb-3" style="display: none;">
+        <img id="selected-article-image" class="article-image" src="" alt="Article Image">
+      </div>
+      <!-- Article Body -->
+      <div id="selected-article-body"></div>
+      <!-- Iframe for Original Facebook Post -->
+      <div id="original-post-iframe-container">
+        <iframe
+          id="original-post-iframe"
+          src=""
+          width="500"
+          height="680"
+          style="border:none;overflow:hidden"
+          scrolling="no"
+          frameborder="0"
+          allowTransparency="true"
+          allow="encrypted-media">
+        </iframe>
+      </div>
+      <!-- Edit Form (hidden by default) -->
+      <div id="edit-article-container" class="mt-4" style="display: none;">
+        <input type="text" id="edit-title-input" class="form-control" placeholder="Edit Title">
+        <textarea id="edit-body-textarea" class="form-control" rows="6" placeholder="Edit Body"></textarea>
+        <div class="mt-2">
+          <button id="btn-save" class="btn btn-success btn-sm me-2">
+            <i class="fas fa-check"></i> Save Changes
+          </button>
+          <button id="btn-cancel" class="btn btn-secondary btn-sm">
+            <i class="fas fa-times"></i> Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- RIGHT COLUMN: WP Categories -->
+  <div class="col-lg-3 mb-4">
+    <aside class="right-pane" id="right-pane">
+      <div class="d-flex justify-content-between align-items-center">
+        <h3>WordPress Categories</h3>
+        <button id="toggleWpCategories" class="btn btn-outline-secondary btn-sm collapse-btn">Collapse</button>
+      </div>
+      {% if wp_categories %}
+        <ul class="list-unstyled" id="wp-category-list">
+          {% for cat in wp_categories %}
+            <li class="mb-1">
+              <input type="radio" name="wp_category" value="{{ cat.id }}" id="cat-{{ cat.id }}">
+              <label for="cat-{{ cat.id }}">{{ cat.name }}</label>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p>No categories found</p>
+      {% endif %}
+    </aside>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+  // Global State
+  let articlesData = {{ articles|tojson }};
+  let currentType = 'Twitter';   // default source
+  let currentArticle = null;
+  let isEditing = false;
+  let selectedArticles = new Set();
+  // Load read article IDs from localStorage
+  let readArticleIds = JSON.parse(localStorage.getItem("readArticleIds") || "[]");
+  let readSet = new Set(readArticleIds);
+  // Date / Grouping Helpers
+  function parseArticleDate(dateStr) {
+    if (!dateStr) return new Date(0);
+    const isoStr = dateStr.replace(' ', 'T');
+    return new Date(isoStr);
+  }
+  function getTimeGroupLabel(articleDate) {
+    const now = new Date();
+    const dateMidnight = new Date(articleDate.getFullYear(), articleDate.getMonth(), articleDate.getDate());
+    const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diffMs = nowMidnight - dateMidnight;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return "Today";
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays < 7) return articleDate.toLocaleString('en-US', { weekday: 'long' });
+    if (diffDays < 14) return "Last Week";
+    if (diffDays < 21) return "Two Weeks Ago";
+    if (diffDays < 28) return "Three Weeks Ago";
+    if (diffDays < 60) return "Last Month";
+    return "Older";
+  }
+  function groupRank(label) {
+    switch (label) {
+      case "Today": return 1;
+      case "Yesterday": return 2;
+      case "Monday": return 3;
+      case "Tuesday": return 4;
+      case "Wednesday": return 5;
+      case "Thursday": return 6;
+      case "Friday": return 7;
+      case "Saturday": return 8;
+      case "Sunday": return 9;
+      case "Last Week": return 10;
+      case "Two Weeks Ago": return 11;
+      case "Three Weeks Ago": return 12;
+      case "Last Month": return 13;
+      default: return 14;
+    }
+  }
+  function groupArticlesByTime(articles) {
+    const groups = {};
+    articles.forEach(article => {
+      if (!article.date) return;
+      const dateObj = parseArticleDate(article.date);
+      const label = getTimeGroupLabel(dateObj);
+      if (!groups[label]) groups[label] = [];
+      groups[label].push(article);
+    });
+    return groups;
+  }
+  // Marking Articles Read/Unread
+  function isArticleUnread(article) {
+    return !readSet.has(article.row_index);
+  }
+  function markArticleAsRead(article) {
+    readSet.add(article.row_index);
+    localStorage.setItem("readArticleIds", JSON.stringify([...readSet]));
+  }
+  // Render / Display
+  function renderArticleList() {
+    const listContainer = document.getElementById("grouped-article-list");
+    listContainer.innerHTML = "";
+    selectedArticles.clear();
+    const filtered = articlesData.filter(a => a.category === currentType);
+    if (filtered.length === 0) {
+      listContainer.innerHTML = "<p class='text-muted'>No articles found.</p>";
+      return;
+    }
+    const grouped = groupArticlesByTime(filtered);
+    let groupLabels = Object.keys(grouped);
+    groupLabels.sort((a, b) => groupRank(a) - groupRank(b));
+    groupLabels.forEach(label => {
+      const articlesInGroup = grouped[label];
+      if (!articlesInGroup || articlesInGroup.length === 0) return;
+      const groupContainer = document.createElement('div');
+      groupContainer.classList.add('article-group-container');
+      const headingEl = document.createElement('h5');
+      headingEl.classList.add('article-group-heading');
+      const toggleIcon = document.createElement('span');
+      toggleIcon.className = 'toggle-icon fas fa-angle-down';
+      const labelText = document.createElement('span');
+      labelText.textContent = label;
+      headingEl.appendChild(labelText);
+      headingEl.appendChild(toggleIcon);
+      groupContainer.appendChild(headingEl);
+      const articlesWrapper = document.createElement('div');
+      articlesWrapper.classList.add('article-group-articles');
+      articlesInGroup.forEach(article => {
+        const itemDiv = document.createElement('div');
+        itemDiv.classList.add('article-item');
+        const checkbox = document.createElement('input');
+        checkbox.type = "checkbox";
+        checkbox.value = article.row_index;
+        checkbox.style.marginRight = "0.5rem";
+        checkbox.addEventListener('change', function() {
+          const id = parseInt(this.value);
+          if (this.checked) {
+            selectedArticles.add(id);
+          } else {
+            selectedArticles.delete(id);
+          }
+        });
+        const infoDiv = document.createElement('div');
+        infoDiv.innerHTML = `
+          <div class="article-title-truncate">
+            ${article.title}
+            ${isArticleUnread(article) ? '<span class="unread-dot"></span>' : ''}
+          </div>
+          <div class="article-date">${article.date}</div>
+        `;
+        itemDiv.appendChild(checkbox);
+        itemDiv.appendChild(infoDiv);
+        itemDiv.addEventListener('click', function(e) {
+          if (e.target.type !== 'checkbox') {
+            loadArticle(article);
+          }
+        });
+        articlesWrapper.appendChild(itemDiv);
+      });
+      groupContainer.appendChild(articlesWrapper);
+      listContainer.appendChild(groupContainer);
+      headingEl.addEventListener('click', () => {
+        if (articlesWrapper.style.display === 'none') {
+          articlesWrapper.style.display = 'block';
+          toggleIcon.classList.remove('fa-angle-right');
+          toggleIcon.classList.add('fa-angle-down');
+        } else {
+          articlesWrapper.style.display = 'none';
+          toggleIcon.classList.remove('fa-angle-down');
+          toggleIcon.classList.add('fa-angle-right');
+        }
+      });
+    });
+    if (!currentArticle && filtered.length > 0) {
+      loadArticle(filtered[0]);
+    }
+  }
+  function loadArticle(article) {
+    currentArticle = article;
+    isEditing = false;
+    markArticleAsRead(article);
+    renderArticleList();
+    document.getElementById("selected-article-title").textContent = article.title || "";
+    document.getElementById("selected-article-body").innerHTML = article.body || "";
+    document.getElementById("selected-category-name").textContent = article.category || "";
+    if (article.image) {
+      document.getElementById("selected-article-image").src = article.image;
+      document.getElementById("selected-article-image-container").style.display = "block";
+    } else {
+      document.getElementById("selected-article-image-container").style.display = "none";
+    }
+    if (article.source) {
+      const encodedUrl = encodeURIComponent(article.source);
+      document.getElementById("original-post-iframe").src =
+        "https://www.facebook.com/plugins/post.php?href=" + encodedUrl + "&width=500";
+      document.getElementById("original-post-iframe-container").style.display = "block";
+      document.getElementById("selected-article-source").innerHTML =
+        `<a href="${article.source}" target="_blank">View Original Post</a>`;
+    } else {
+      document.getElementById("original-post-iframe-container").style.display = "none";
+      document.getElementById("selected-article-source").innerHTML = "";
+    }
+    document.getElementById("edit-article-container").style.display = "none";
+  }
+  // Delete Logic
+  function deleteArticle(article) {
+    fetch("/delete_article", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        article_id: article.row_index,
+        category: article.category
+      })
+    })
+    .then(response => response.json().catch(err => {
+      console.error("JSON parse error:", err);
+      return { error: "Invalid JSON response from server." };
+    }))
+    .then(data => {
+      if (data.status === "success") {
+        alert("Article deleted successfully.");
+        const idx = articlesData.findIndex(a =>
+          a.row_index === article.row_index && a.category === article.category
+        );
+        if (idx > -1) articlesData.splice(idx, 1);
+        renderArticleList();
+        if (currentArticle &&
+            currentArticle.row_index === article.row_index &&
+            currentArticle.category === article.category) {
+          document.getElementById("selected-article-title").textContent = "";
+          document.getElementById("selected-article-body").innerHTML = "";
+          document.getElementById("selected-category-name").textContent = "";
+          document.getElementById("selected-article-image-container").style.display = "none";
+          document.getElementById("selected-article-source").innerHTML = "";
+          document.getElementById("original-post-iframe-container").style.display = "none";
+          currentArticle = null;
+        }
+      } else {
+        alert("Failed to delete article: " + (data.error || "Unknown error"));
+      }
+    })
+    .catch(err => {
+      alert("Error deleting article: " + err.message);
+    });
+  }
+  function deleteSelectedArticles() {
+    if (selectedArticles.size === 0) {
+      alert("No articles selected.");
+      return;
+    }
+    if (!confirm("Are you sure you want to delete the selected articles?")) return;
+    const idsToDelete = Array.from(selectedArticles);
+    idsToDelete.forEach(id => {
+      const article = articlesData.find(a => a.row_index === id);
+      if (article) {
+        deleteArticle(article);
+      }
+    });
+  }
+  // "Select All" / "Deselect All"
+  function toggleSelectAllArticles() {
+    const checkboxes = document.querySelectorAll(".article-item input[type='checkbox']");
+    let allSelected = true;
+    checkboxes.forEach(checkbox => {
+      if (!checkbox.checked) {
+        allSelected = false;
+      }
+    });
+    if (allSelected) {
+      checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+        selectedArticles.delete(parseInt(checkbox.value));
+      });
+    } else {
+      checkboxes.forEach(checkbox => {
+        checkbox.checked = true;
+        selectedArticles.add(parseInt(checkbox.value));
+      });
+    }
+  }
+  // Editing
+  document.getElementById("btn-edit").addEventListener('click', () => {
+    if (!currentArticle) return;
+    isEditing = true;
+    document.getElementById("edit-article-container").style.display = "block";
+    document.getElementById("edit-title-input").value = currentArticle.title || "";
+    document.getElementById("edit-body-textarea").value = currentArticle.body || "";
+  });
+  document.getElementById("btn-cancel").addEventListener('click', () => {
+    isEditing = false;
+    document.getElementById("edit-article-container").style.display = "none";
+  });
+  document.getElementById("btn-save").addEventListener('click', () => {
+    if (!currentArticle) return;
+    const newTitle = document.getElementById("edit-title-input").value.trim();
+    const newBody = document.getElementById("edit-body-textarea").value.trim();
+    fetch("/update_article", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        row_index: currentArticle.row_index,
+        title: newTitle,
+        body: newBody
+      })
+    })
+    .then(response => response.json().catch(err => ({ error: "Invalid JSON response" })))
+    .then(data => {
+      if (data.status === "success") {
+        alert("Article updated successfully.");
+        currentArticle.title = newTitle;
+        currentArticle.body = newBody;
+        loadArticle(currentArticle);
+        renderArticleList();
+      } else {
+        alert("Failed to update article: " + (data.error || "Unknown error"));
+      }
+    })
+    .catch(err => {
+      alert("Error updating article: " + err.message);
+    });
+  });
+  // Single-Article Delete (Right Pane)
+  document.getElementById("btn-delete").addEventListener('click', () => {
+    if (!currentArticle) return;
+    if (confirm("Are you sure you want to delete this article?")) {
+      deleteArticle(currentArticle);
+    }
+  });
+  // Publish to WordPress
+  function getSelectedCategory() {
+    const catInputs = document.querySelectorAll('input[name="wp_category"]');
+    for (const input of catInputs) {
+      if (input.checked) {
+        return input.value;
+      }
+    }
+    return "";
+  }
+  async function publishArticleToWordPress(status) {
+    if (!currentArticle) return;
+    const selectedWpCat = getSelectedCategory();
+    const payload = {
+      row_index: currentArticle.row_index,
+      title: currentArticle.title,
+      body: currentArticle.body,
+      date: currentArticle.date,
+      category: currentArticle.category,
+      image: currentArticle.image,
+      wp_category_id: selectedWpCat,
+      publish_status: status
+    };
+    try {
+      const response = await fetch("/publish_article", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+      if (response.ok) {
+        alert(
+          status === "publish"
+            ? "Successfully published to WordPress!\n" + (result.message || "")
+            : "Article saved as draft!\n" + (result.message || "")
+        );
+      } else {
+        alert("Error publishing to WordPress: " + (result.error || JSON.stringify(result)));
+      }
+    } catch (err) {
+      alert("Failed to publish: " + err.message);
+    }
+  }
+  document.getElementById("btn-publish-now").addEventListener('click', () => {
+    publishArticleToWordPress("publish");
+  });
+  document.getElementById("btn-save-draft").addEventListener('click', () => {
+    publishArticleToWordPress("draft");
+  });
+  // Multi-Select Buttons
+  document.getElementById("btn-select-all").addEventListener('click', toggleSelectAllArticles);
+  document.getElementById("btn-delete-selected").addEventListener('click', deleteSelectedArticles);
+  // Platform Selection Buttons
+  document.getElementById("btn-twitter-articles").addEventListener('click', () => {
+    currentType = 'Twitter';
+    renderArticleList();
+  });
+  document.getElementById("btn-facebook-articles").addEventListener('click', () => {
+    currentType = 'Facebook';
+    renderArticleList();
+  });
+  // Toggle WP Categories
+  document.getElementById("toggleWpCategories").addEventListener('click', function() {
+    const wpList = document.getElementById("wp-category-list");
+    if (wpList.style.display === "none") {
+      wpList.style.display = "block";
+      this.textContent = "Collapse";
+    } else {
+      wpList.style.display = "none";
+      this.textContent = "Expand";
+    }
+  });
+  // Initial Render
+  renderArticleList();
+</script>
+{% endblock %}

@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual env
+venv/
+
+# Logs
+*.log
+scrape_twitter.log
+
+# Secrets / env files
+.env
+*.env
+.env.*.local
+.env.local
+client_secret*.json
+
+# DB / local state
+*.sqlite
+*.sqlite3
+*.db
+instance/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
