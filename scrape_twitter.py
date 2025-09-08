@@ -42,6 +42,10 @@ EXTRA_QUERY = os.getenv("APIFY_EXTRA_QUERY", "").strip()
 # If set to "1", use searchTerms instead of twitterHandles
 USE_SEARCH_TERMS = os.getenv("APIFY_USE_SEARCH_TERMS", "0") == "1"
 
+# Target article length controls (word band)
+ARTICLE_MIN_WORDS = int(os.getenv("ARTICLE_MIN_WORDS", "500"))
+ARTICLE_MAX_WORDS = int(os.getenv("ARTICLE_MAX_WORDS", "600"))
+
 # Init Apify client
 client = ApifyClient(APIFY_TOKEN)
 
@@ -124,8 +128,54 @@ def _is_demo_item(item: dict) -> bool:
     keys = set(item.keys())
     return keys == {"demo"} or (keys == {"demo", "type"} and not any(k in item for k in ["id", "text", "fullText"]))
 
+# -------- Length helpers (enforce 500–600 words without re-calling the API) --------
+def _enforce_word_limit_on_article(full_text: str, min_words: int, max_words: int) -> str:
+    """
+    We try to limit the *article body* to the desired band.
+    If 'Original Tweet:' exists, we trim only the article part and then re-attach the rest.
+    """
+    if not full_text:
+        return full_text
+
+    # Split away the 'Original Tweet:' section if present
+    lower_marker = "original tweet:"
+    idx = full_text.lower().find(lower_marker)
+
+    if idx != -1:
+        article = full_text[:idx].rstrip()
+        rest = full_text[idx:]  # keep as-is
+        trimmed_article = _trim_to_word_band(article, min_words, max_words)
+        return trimmed_article.rstrip() + "\n\n" + rest.lstrip()
+    else:
+        return _trim_to_word_band(full_text, min_words, max_words)
+
+def _trim_to_word_band(text: str, min_words: int, max_words: int) -> str:
+    words = text.split()
+    if not words:
+        return text
+
+    # If within band, keep
+    if len(words) <= max_words:
+        return text
+
+    # If over, cut near sentence boundary at or just after max_words
+    cut_idx = max_words
+    end = min(len(words), max_words + 50)  # allow small lookahead to finish a sentence
+    for i in range(max_words, end):
+        if words[i - 1].endswith((".", "!", "?", "…", "—", "–", ";", ":")):
+            cut_idx = i
+            break
+    return " ".join(words[:cut_idx])
+
+def _approx_max_tokens_for_words(max_words: int) -> int:
+    """
+    Rough conversion words -> tokens. Many English texts are ~1.3–1.5 tokens/word.
+    We'll give headroom: 1.5 * words + small buffer.
+    """
+    return int(max_words * 1.5) + 100
+
 # ------------------ ChatGPT helpers ------------------
-def call_chatgpt(prompt: str) -> str:
+def call_chatgpt(prompt: str, max_words: int) -> str:
     if not OPENAI_API_KEY:
         return "OpenAI API key not set."
 
@@ -134,10 +184,12 @@ def call_chatgpt(prompt: str) -> str:
     payload = {
         "model": CHATGPT_MODEL,
         "messages": [
-            {"role": "system", "content": "You are ChatGPT-4. You are a helpful assistant."},
+            {"role": "system", "content": "You are a concise newsroom editor who writes clear, factual short articles."},
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.3,
+        # Hard cap to ~500–600 words worth of tokens
+        "max_tokens": _approx_max_tokens_for_words(max_words),
     }
     try:
         resp = requests.post(url, headers=headers, json=payload, timeout=60)
@@ -306,17 +358,31 @@ def scrape_and_store_tweets_for_user(user):
     for st in new_items:
         author_name = st.author_name or "Unknown"
         tweet_text = st.text or st.full_text or ""
+
+        # Prompt tuned for ~550 words
         prompt = (
-            "You are ChatGPT-4. Below is a tweet in its original language. "
-            f"Please translate and adjust it so that it is readable in {lang_name}. "
-            f"Start by saying: 'In the latest tweet from ({author_name})...'. "
-            "Then provide a summary in two paragraphs or less, explaining the context or importance of the tweet, "
-            f"and finally repeat the original tweet as is. Please do it in {lang_name}. "
-            "At the end, on a new line, output the short title in the format: 'Post Title: [Title]'.\n\n"
+            f"Write a short news-style article in {lang_name} based on the tweet below. "
+            f"Strictly keep the body between {ARTICLE_MIN_WORDS} and {ARTICLE_MAX_WORDS} words (target ≈ 550). "
+            "Start the article with the sentence: "
+            f"\"In the latest tweet from ({author_name})...\" "
+            "Then craft:\n"
+            "• A two-sentence lead that sets the context.\n"
+            "• 3–5 compact paragraphs covering what happened, why it matters, relevant background, and immediate reactions.\n"
+            "• A one-sentence takeaway at the end.\n\n"
+            "Guidelines: translate any non-target-language content; be neutral and factual; avoid hashtags/links unless essential; "
+            "do not include bullet points in the final article (use normal paragraphs).\n\n"
+            "After the article, on a new line output: Post Title: [a concise, SEO-friendly headline]\n"
+            "Finally, on a new line include the original tweet verbatim prefixed by 'Original Tweet:'. "
+            "Do not count that 'Original Tweet:' line toward the word limit.\n\n"
             f"Original Tweet: {tweet_text}"
         )
-        response = call_chatgpt(prompt)
+
+        response = call_chatgpt(prompt, ARTICLE_MAX_WORDS)
         title, summary = parse_chatgpt_response(response)
+
+        # Enforce 500–600 word band on the article portion only
+        summary = _enforce_word_limit_on_article(summary, ARTICLE_MIN_WORDS, ARTICLE_MAX_WORDS)
+
         if title and summary:
             st.chatgpt_output = summary
             st.chatgpt_title = title
