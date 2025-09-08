@@ -1,5 +1,6 @@
 # scrape_twitter.py
 import os
+import time
 import logging
 from datetime import datetime, date, timedelta, timezone
 from dateutil import parser as dtparser
@@ -46,6 +47,10 @@ USE_SEARCH_TERMS = os.getenv("APIFY_USE_SEARCH_TERMS", "0") == "1"
 ARTICLE_MIN_WORDS = int(os.getenv("ARTICLE_MIN_WORDS", "500"))
 ARTICLE_MAX_WORDS = int(os.getenv("ARTICLE_MAX_WORDS", "600"))
 
+# OpenAI robustness
+OPENAI_TIMEOUT_SECONDS = int(os.getenv("OPENAI_TIMEOUT_SECONDS", "120"))
+OPENAI_MAX_RETRIES = int(os.getenv("OPENAI_MAX_RETRIES", "5"))
+
 # Init Apify client
 client = ApifyClient(APIFY_TOKEN)
 
@@ -55,7 +60,8 @@ def _normalize_handle(h: str) -> str:
         return ""
     h = h.strip()
     if h.startswith("http"):
-        path = urlparse(h).path.strip("/")
+        from urllib.parse import urlparse as _urlparse
+        path = _urlparse(h).path.strip("/")
         return (path.split("/", 1)[0] if path else "").lstrip("@")
     return h.lstrip("@")
 
@@ -115,13 +121,11 @@ def _extract_photo_url(item: dict):
     if isinstance(media, list) and media:
         m = media[0]
         return m.get("media_url_https") or m.get("media_url") or ""
-
     ext = item.get("extendedEntities") or item.get("extended_entities") or {}
     media2 = ext.get("media") or []
     if isinstance(media2, list) and media2:
         m = media2[0]
         return m.get("media_url_https") or m.get("media_url") or ""
-
     return ""
 
 def _is_demo_item(item: dict) -> bool:
@@ -129,36 +133,12 @@ def _is_demo_item(item: dict) -> bool:
     return keys == {"demo"} or (keys == {"demo", "type"} and not any(k in item for k in ["id", "text", "fullText"]))
 
 # -------- Length helpers (enforce 500–600 words without re-calling the API) --------
-def _enforce_word_limit_on_article(full_text: str, min_words: int, max_words: int) -> str:
-    """
-    We try to limit the *article body* to the desired band.
-    If 'Original Tweet:' exists, we trim only the article part and then re-attach the rest.
-    """
-    if not full_text:
-        return full_text
-
-    # Split away the 'Original Tweet:' section if present
-    lower_marker = "original tweet:"
-    idx = full_text.lower().find(lower_marker)
-
-    if idx != -1:
-        article = full_text[:idx].rstrip()
-        rest = full_text[idx:]  # keep as-is
-        trimmed_article = _trim_to_word_band(article, min_words, max_words)
-        return trimmed_article.rstrip() + "\n\n" + rest.lstrip()
-    else:
-        return _trim_to_word_band(full_text, min_words, max_words)
-
 def _trim_to_word_band(text: str, min_words: int, max_words: int) -> str:
     words = text.split()
     if not words:
         return text
-
-    # If within band, keep
     if len(words) <= max_words:
         return text
-
-    # If over, cut near sentence boundary at or just after max_words
     cut_idx = max_words
     end = min(len(words), max_words + 50)  # allow small lookahead to finish a sentence
     for i in range(max_words, end):
@@ -167,16 +147,27 @@ def _trim_to_word_band(text: str, min_words: int, max_words: int) -> str:
             break
     return " ".join(words[:cut_idx])
 
-def _approx_max_tokens_for_words(max_words: int) -> int:
-    """
-    Rough conversion words -> tokens. Many English texts are ~1.3–1.5 tokens/word.
-    We'll give headroom: 1.5 * words + small buffer.
-    """
-    return int(max_words * 1.5) + 100
+def _enforce_word_limit_on_article(full_text: str, min_words: int, max_words: int) -> str:
+    if not full_text:
+        return full_text
+    lower_marker = "original tweet:"
+    idx = full_text.lower().find(lower_marker)
+    if idx != -1:
+        article = full_text[:idx].rstrip()
+        rest = full_text[idx:]  # keep as-is
+        trimmed_article = _trim_to_word_band(article, min_words, max_words)
+        return trimmed_article.rstrip() + "\n\n" + rest.lstrip()
+    else:
+        return _trim_to_word_band(full_text, min_words, max_words)
 
-# ------------------ ChatGPT helpers ------------------
+def _approx_max_tokens_for_words(max_words: int) -> int:
+    # Rough conversion words -> tokens + buffer
+    return int(max_words * 1.5) + 120
+
+# ------------------ ChatGPT helpers (with retries) ------------------
 def call_chatgpt(prompt: str, max_words: int) -> str:
     if not OPENAI_API_KEY:
+        logger.error("OPENAI_API_KEY is not set.")
         return "OpenAI API key not set."
 
     url = "https://api.openai.com/v1/chat/completions"
@@ -188,19 +179,42 @@ def call_chatgpt(prompt: str, max_words: int) -> str:
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.3,
-        # Hard cap to ~500–600 words worth of tokens
         "max_tokens": _approx_max_tokens_for_words(max_words),
     }
-    try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=60)
-        data = resp.json()
-        logger.info("OpenAI response: %s", data)
-        if "choices" in data and data["choices"]:
-            return data["choices"][0]["message"]["content"].strip()
-        return "No response from ChatGPT."
-    except Exception as e:
-        logger.error("Error calling ChatGPT: %s", e)
-        return f"Error calling ChatGPT: {e}"
+
+    delay = 1.0
+    backoff = 1.6
+    for attempt in range(1, OPENAI_MAX_RETRIES + 1):
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=OPENAI_TIMEOUT_SECONDS)
+            if 200 <= resp.status_code < 300:
+                data = resp.json()
+                if "choices" in data and data["choices"]:
+                    return data["choices"][0]["message"]["content"].strip()
+                return "No response from ChatGPT."
+            if resp.status_code in (429, 500, 502, 503, 504):
+                ra = resp.headers.get("Retry-After")
+                if ra:
+                    try:
+                        delay = max(delay, float(ra))
+                    except Exception:
+                        pass
+                logger.warning("OpenAI status %s; retrying in %.1fs (attempt %d/%d)",
+                               resp.status_code, delay, attempt, OPENAI_MAX_RETRIES)
+                time.sleep(delay)
+                delay *= backoff
+                continue
+            # Other non-retryable errors
+            logger.error("OpenAI error %s: %s", resp.status_code, resp.text[:400])
+            return f"Error from ChatGPT API: {resp.status_code}"
+        except Exception as e:
+            logger.warning("OpenAI request failed (%s); retrying in %.1fs (attempt %d/%d)",
+                           e, delay, attempt, OPENAI_MAX_RETRIES)
+            time.sleep(delay)
+            delay *= backoff
+
+    logger.error("OpenAI request failed after %d attempts.", OPENAI_MAX_RETRIES)
+    return "No response from ChatGPT after retries."
 
 def parse_chatgpt_response(response_text):
     if "Post Title:" in response_text:
@@ -327,7 +341,7 @@ def scrape_and_store_tweets_for_user(user):
     db.session.commit()
     logger.info("Inserted %d new tweets for user %s into DB.", len(new_items), user.id)
 
-    # -------- Optional summaries via ChatGPT --------
+    # -------- Summaries via ChatGPT --------
     if not OPENAI_API_KEY:
         logger.info("OPENAI_API_KEY not set; skipping ChatGPT summaries.")
         return
@@ -359,7 +373,6 @@ def scrape_and_store_tweets_for_user(user):
         author_name = st.author_name or "Unknown"
         tweet_text = st.text or st.full_text or ""
 
-        # Prompt tuned for ~550 words
         prompt = (
             f"Write a short news-style article in {lang_name} based on the tweet below. "
             f"Strictly keep the body between {ARTICLE_MIN_WORDS} and {ARTICLE_MAX_WORDS} words (target ≈ 550). "

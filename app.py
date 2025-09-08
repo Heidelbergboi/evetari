@@ -4,19 +4,24 @@ import logging
 from urllib.parse import urlparse
 os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
 
-from flask import Flask, render_template, redirect, url_for, session, flash, request, jsonify
+from flask import Flask, render_template, redirect, url_for, session, flash, request, jsonify, current_app
 from config import Config
 from flask_migrate import Migrate
 from flask_dance.contrib.google import make_google_blueprint, google
 from functools import wraps
 from extensions import db
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 import requests
 # from flask_apscheduler import APScheduler  <-- Scheduler import not needed if not used
 
 logging.basicConfig(level=logging.DEBUG)
 
 migrate = Migrate()
+
+# Background executor to run scraper jobs without blocking web requests
+SCRAPER_WORKERS = int(os.getenv("SCRAPER_WORKERS", "2"))
+executor = ThreadPoolExecutor(max_workers=SCRAPER_WORKERS)
 
 def upload_media_to_wp(image_url, wp_site, wp_user, wp_pass):
     try:
@@ -38,7 +43,7 @@ def upload_media_to_wp(image_url, wp_site, wp_user, wp_pass):
             "Accept": "application/json"
         }
         upload_url = f"{wp_site.rstrip('/')}/wp-json/wp/v2/media"
-        upload_response = requests.post(upload_url, headers=headers, files=files, auth=auth)
+        upload_response = requests.post(upload_url, headers=headers, files=files, auth=auth, timeout=60)
         if upload_response.status_code in [200, 201]:
             media_id = upload_response.json().get('id')
             logging.debug(f"Uploaded image to WP: {image_url} with Media ID: {media_id}")
@@ -233,7 +238,7 @@ def create_app():
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
                 "Accept": "application/json"
             }
-            r = requests.get(url, auth=auth, headers=headers)
+            r = requests.get(url, auth=auth, headers=headers, timeout=20)
             if r.status_code == 200:
                 return r.json()
         except Exception as e:
@@ -324,34 +329,56 @@ def create_app():
             return redirect(url_for("dashboard"))
         return "Placeholder for new article form."
 
+    # ---- NON-BLOCKING scraper trigger (queues a background job) ----
+    def _run_scraper_job(app_obj, user_id):
+        with app_obj.app_context():
+            from models import User
+            from scrape_twitter import scrape_and_store_tweets_for_user
+            user = db.session.get(User, user_id)
+            if not user:
+                current_app.logger.warning("Scraper job: user %s not found", user_id)
+                return
+            try:
+                scrape_and_store_tweets_for_user(user)
+                user.last_scraped_at = datetime.now()
+                db.session.commit()
+                current_app.logger.info("Scraper job finished for user_id=%s", user_id)
+            except Exception as e:
+                current_app.logger.exception("Scraper job failed for user_id=%s: %s", user_id, e)
+
     @app.route("/run_scraper", methods=["POST"])
     @login_required
     def run_scraper():
-        from models import User
-        user = db.session.get(User, session["user_id"])
-        try:
-            from scrape_twitter import scrape_and_store_tweets_for_user
-            scrape_and_store_tweets_for_user(user)
-            user.last_scraped_at = datetime.now()
-            db.session.commit()
-            flash("Twitter scraping completed successfully.", "success")
-        except Exception as e:
-            flash("Twitter scraping failed: " + str(e), "error")
+        user_id = session["user_id"]
+        app_obj = current_app._get_current_object()
+        executor.submit(_run_scraper_job, app_obj, user_id)
+        flash("Scraper queued. It will run in the background.", "info")
         return redirect(url_for("index"))
+
+    # (Optional) make FB scraper non-blocking too
+    def _run_fb_scraper_job(app_obj, user_id):
+        with app_obj.app_context():
+            from models import User
+            from scrape_facebook import scrape_and_store_fb_posts_for_user
+            user = db.session.get(User, user_id)
+            if not user:
+                current_app.logger.warning("FB scraper job: user %s not found", user_id)
+                return
+            try:
+                scrape_and_store_fb_posts_for_user(user)
+                user.last_scraped_at = datetime.now()
+                db.session.commit()
+                current_app.logger.info("FB scraper job finished for user_id=%s", user_id)
+            except Exception as e:
+                current_app.logger.exception("FB scraper job failed for user_id=%s: %s", user_id, e)
 
     @app.route("/run_fb_scraper", methods=["POST"])
     @login_required
     def run_fb_scraper():
-        from models import User
-        user = db.session.get(User, session["user_id"])
-        try:
-            from scrape_facebook import scrape_and_store_fb_posts_for_user
-            scrape_and_store_fb_posts_for_user(user)
-            user.last_scraped_at = datetime.now()
-            db.session.commit()
-            flash("Facebook scraping completed successfully.", "success")
-        except Exception as e:
-            flash("Facebook scraping failed: " + str(e), "error")
+        user_id = session["user_id"]
+        app_obj = current_app._get_current_object()
+        executor.submit(_run_fb_scraper_job, app_obj, user_id)
+        flash("Facebook scraper queued. It will run in the background.", "info")
         return redirect(url_for("index"))
 
     @app.route("/publish_article", methods=["POST"])
@@ -398,7 +425,7 @@ def create_app():
                 "Content-Type": "application/json"
             }
             auth = requests.auth.HTTPBasicAuth(wp_user, wp_pass)
-            response = requests.post(wp_api_endpoint, headers=headers, json=post_payload, auth=auth)
+            response = requests.post(wp_api_endpoint, headers=headers, json=post_payload, auth=auth, timeout=60)
             logging.debug(f"Request URL: {wp_api_endpoint}")
             logging.debug(f"Request Payload: {post_payload}")
             logging.debug(f"Response Status Code: {response.status_code}")
@@ -491,18 +518,6 @@ def create_app():
             app.logger.info("Scheduled scraping completed.")
 
     # Scheduler disabled - automatic scraping is turned off.
-    # If you ever wish to re-enable automatic scraping, you can uncomment the following code:
-    #
-    # from flask_apscheduler import APScheduler
-    # scheduler = APScheduler()
-    # scheduler.init_app(app)
-    # scheduler.add_job(
-    #     id='Scheduled_Scraping',
-    #     func=scheduled_scrape,
-    #     trigger='interval',
-    #     minutes=app.config.get("SCRAPER_INTERVAL_MINUTES", 30)
-    # )
-    # scheduler.start()
 
     return app
 
