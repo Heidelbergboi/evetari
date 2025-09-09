@@ -2,6 +2,7 @@
 import os
 import time
 import logging
+import re
 from datetime import datetime, date, timedelta, timezone
 from dateutil import parser as dtparser
 from urllib.parse import urlparse
@@ -199,8 +200,10 @@ def call_chatgpt(prompt: str, max_words: int) -> str:
                         delay = max(delay, float(ra))
                     except Exception:
                         pass
-                logger.warning("OpenAI status %s; retrying in %.1fs (attempt %d/%d)",
-                               resp.status_code, delay, attempt, OPENAI_MAX_RETRIES)
+                logger.warning(
+                    "OpenAI status %s; retrying in %.1fs (attempt %d/%d)",
+                    resp.status_code, delay, attempt, OPENAI_MAX_RETRIES
+                )
                 time.sleep(delay)
                 delay *= backoff
                 continue
@@ -208,22 +211,56 @@ def call_chatgpt(prompt: str, max_words: int) -> str:
             logger.error("OpenAI error %s: %s", resp.status_code, resp.text[:400])
             return f"Error from ChatGPT API: {resp.status_code}"
         except Exception as e:
-            logger.warning("OpenAI request failed (%s); retrying in %.1fs (attempt %d/%d)",
-                           e, delay, attempt, OPENAI_MAX_RETRIES)
+            logger.warning(
+                "OpenAI request failed (%s); retrying in %.1fs (attempt %d/%d)",
+                e, delay, attempt, OPENAI_MAX_RETRIES
+            )
             time.sleep(delay)
             delay *= backoff
 
     logger.error("OpenAI request failed after %d attempts.", OPENAI_MAX_RETRIES)
     return "No response from ChatGPT after retries."
 
-def parse_chatgpt_response(response_text):
-    if "Post Title:" in response_text:
-        parts = response_text.split("Post Title:")
-        summary = parts[0].strip()
-        title = parts[1].strip()
-        return title, summary
-    else:
-        return "Untitled", response_text
+# -------- Robust parsing: title only from 'Post Title:' line; keep body + original tweet --------
+def parse_chatgpt_response(response_text: str):
+    """
+    Extract:
+      - title = first occurrence of 'Post Title:' line (only the same line, case-insensitive)
+      - body  = everything BEFORE the 'Post Title:' line,
+                plus the 'Original Tweet:' line (if present anywhere)
+    Ensures the title never contains 'Original Tweet:'.
+    """
+    if not response_text:
+        return "Untitled", ""
+
+    text = response_text.strip()
+
+    # Find the 'Post Title:' line (case-insensitive, at line start)
+    m_title = re.search(r"(?im)^\s*post\s*title\s*:\s*(.+)$", text)
+    if not m_title:
+        # Fallback: no explicit title line; return all as body
+        return "Untitled", text
+
+    # Title line content
+    title_line = m_title.group(1).strip()
+    # If model accidentally appended 'Original Tweet:' on same line, strip it off.
+    title_line = re.split(r"(?i)\boriginal\s*tweet\s*:", title_line)[0].strip()
+    if not title_line:
+        title_line = "Untitled"
+
+    # Article/body is everything before the 'Post Title:' line
+    article_body = text[: m_title.start()].rstrip()
+
+    # Grab the 'Original Tweet:' line (case-insensitive) from anywhere in the text
+    m_ot = re.search(r"(?im)^\s*original\s*tweet\s*:\s*(.+)$", text)
+    if m_ot:
+        original_tweet_line = "Original Tweet: " + m_ot.group(1).strip()
+        if article_body:
+            article_body = article_body + "\n\n" + original_tweet_line
+        else:
+            article_body = original_tweet_line
+
+    return title_line, article_body
 
 # ------------------ Main scraper ------------------
 def scrape_and_store_tweets_for_user(user):
